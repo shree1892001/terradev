@@ -1,9 +1,9 @@
 apiVersion: 1
 
 providers:
-  - name: RedBeryl DevOps Dashboards
+  - name: SRE Dashboards
     orgId: 1
-    folder: RedBeryl DevOps
+    folder: SRE
     type: file
     disableDeletion: false
     editable: true
