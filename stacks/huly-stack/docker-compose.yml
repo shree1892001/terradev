@@ -1,0 +1,177 @@
+services:
+  huly-cockroach:
+    image: cockroachdb/cockroach:latest-v24.2
+    container_name: huly-selfhost-cockroach-1
+    restart: unless-stopped
+    command: start-single-node --insecure
+    volumes:
+      - huly_cockroach_data:/cockroach/cockroach-data
+    networks:
+      - huly-net
+
+  huly-elastic:
+    image: elasticsearch:7.14.2
+    container_name: huly-selfhost-elastic-1
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+    volumes:
+      - huly_elastic_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200 >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 15
+    networks:
+      - huly-net
+
+  huly-minio:
+    image: minio/minio:RELEASE.2024-08-03T04-33-23Z
+    container_name: huly-selfhost-minio-1
+    restart: unless-stopped
+    command: server /data
+    env_file:
+      - .env
+    volumes:
+      - huly_minio_data:/data
+    networks:
+      - huly-net
+
+  huly-redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.3.6
+    container_name: huly-selfhost-redpanda-1
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - "1G"
+      - --reserve-memory
+      - "0M"
+      - --node-id
+      - "0"
+      - --check=false
+    volumes:
+      - huly_redpanda_data:/var/lib/redpanda/data
+    networks:
+      - huly-net
+
+  huly-account:
+    image: hardcoreeng/account:v0.7.382
+    container_name: huly-selfhost-account-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - huly-net
+
+  huly-front:
+    image: hardcoreeng/front:v0.7.382
+    container_name: huly-selfhost-front-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - huly-net
+
+  huly-transactor:
+    image: hardcoreeng/transactor:v0.7.382
+    container_name: huly-selfhost-transactor-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - huly-net
+
+  huly-workspace:
+    image: hardcoreeng/workspace:v0.7.382
+    container_name: huly-selfhost-workspace-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - huly-net
+
+  huly-fulltext:
+    image: hardcoreeng/fulltext:v0.7.382
+    container_name: huly-selfhost-fulltext-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - huly-net
+
+  huly-stats:
+    image: hardcoreeng/stats:v0.7.382
+    container_name: huly-selfhost-stats-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - huly-net
+
+  huly-rekoni:
+    image: hardcoreeng/rekoni-service:v0.7.382
+    container_name: huly-selfhost-rekoni-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - huly-net
+
+  huly-collaborator:
+    image: hardcoreeng/collaborator:v0.7.382
+    container_name: huly-selfhost-collaborator-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - huly-net
+
+  huly-kvs:
+    image: hardcoreeng/hulykvs:v0.7.382
+    container_name: huly-selfhost-kvs-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8094:8094"
+    networks:
+      - huly-net
+      - redberyl-monitoring-net
+
+  huly-nginx:
+    image: nginx:1.21.3
+    container_name: huly-selfhost-nginx-1
+    restart: unless-stopped
+    ports:
+      - "9898:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - huly-front
+      - huly-account
+      - huly-transactor
+      - huly-collaborator
+      - huly-rekoni
+      - huly-fulltext
+      - huly-kvs
+    networks:
+      - huly-net
+      - redberyl-monitoring-net
+
+networks:
+  huly-net:
+    name: huly-net
+  redberyl-monitoring-net:
+    external: true
+
+volumes:
+  huly_cockroach_data:
+  huly_elastic_data:
+  huly_minio_data:
+  huly_redpanda_data:

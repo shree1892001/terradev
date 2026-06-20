@@ -1,0 +1,12 @@
+configuration-as-code
+credentials
+credentials-binding
+plain-credentials
+git
+workflow-aggregator
+docker-workflow
+aws-credentials
+pipeline-stage-view
+prometheus
+blueocean
+ssh-credentials

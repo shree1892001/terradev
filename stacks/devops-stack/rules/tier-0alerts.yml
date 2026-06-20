@@ -1,0 +1,182 @@
+groups:
+- name: tier0_critical
+  interval: 30s
+  rules:
+
+  # ----------------------------------
+  # Tier-0 service availability
+  # ----------------------------------
+  - alert: Tier0ServiceDown
+    expr: up{tier="tier-0"} == 0
+    for: 1m
+    labels:
+      severity: critical
+      tier: tier-0
+      auto_heal: "true"
+    annotations:
+      summary: "Tier-0 service {{ $labels.service }} is down"
+      description: "Service {{ $labels.job }} has been down for more than 1 minute"
+      action: "Auto-healing will restart the service"
+
+
+  # ----------------------------------
+  # PostgreSQL availability
+  # ----------------------------------
+  - alert: PostgreSQLDown
+    expr: pg_up{tier="tier-0"} == 0
+    for: 30s
+    labels:
+      severity: critical
+      tier: tier-0
+      auto_heal: "true"
+    annotations:
+      summary: "PostgreSQL is down"
+      description: "PostgreSQL exporter cannot reach the database"
+      action: "Auto-healing will attempt restart with integrity check"
+
+
+  # ----------------------------------
+  # High error rate – Tier-0 services
+  # ----------------------------------
+  - alert: Tier0HighErrorRate
+    expr: |
+      (
+        sum(rate(http_server_requests_total{tier="tier-0",status=~"5.."}[5m]))
+        /
+        sum(rate(http_server_requests_total{tier="tier-0"}[5m]))
+      ) > 0.05
+    for: 2m
+    labels:
+      severity: critical
+      tier: tier-0
+      auto_heal: "false"
+    annotations:
+      summary: "High error rate on Tier-0 services"
+      description: "5xx error rate is {{ $value | humanizePercentage }}"
+      action: "Manual investigation required"
+
+
+  # ----------------------------------
+  # High latency – Tier-0 services
+  # ----------------------------------
+  - alert: Tier0HighLatency
+    expr: |
+      histogram_quantile(
+        0.95,
+        sum by (le, service) (
+          rate(http_server_requests_seconds_bucket{tier="tier-0"}[5m])
+        )
+      ) > 1
+    for: 5m
+    labels:
+      severity: high
+      tier: tier-0
+      auto_heal: "false"
+    annotations:
+      summary: "High latency on {{ $labels.service }}"
+      description: "P95 latency is {{ $value }} seconds"
+      action: "Investigate slow queries or resource contention"
+
+
+  # ----------------------------------
+  # Container memory pressure – Tier-0
+  # ----------------------------------
+  - alert: Tier0HighMemory
+    expr: |
+      (
+        container_memory_usage_bytes{tier="tier-0"}
+        /
+        container_spec_memory_limit_bytes{tier="tier-0"}
+      ) > 0.90
+    for: 5m
+    labels:
+      severity: critical
+      tier: tier-0
+      auto_heal: "true"
+    annotations:
+      summary: "High memory usage on {{ $labels.container }}"
+      description: "Memory usage is above 90%"
+      action: "Auto-healing will create heap dump and restart"
+
+
+  # ----------------------------------
+  # Container CPU pressure – Tier-0
+  # ----------------------------------
+  - alert: Tier0HighCPU
+    expr: |
+      rate(container_cpu_usage_seconds_total{tier="tier-0"}[5m]) > 0.90
+    for: 10m
+    labels:
+      severity: high
+      tier: tier-0
+      auto_heal: "true"
+    annotations:
+      summary: "High CPU usage on {{ $labels.container }}"
+      description: "CPU usage is above threshold"
+      action: "Auto-healing will create thread dump and restart"
+
+
+  # ----------------------------------
+  # HikariCP connection pool exhaustion
+  # ----------------------------------
+  - alert: DatabaseConnectionPoolExhausted
+    expr: |
+      hikaricp_connections_active{tier="tier-0"}
+      /
+      hikaricp_connections_max{tier="tier-0"}
+      > 0.95
+    for: 2m
+    labels:
+      severity: critical
+      tier: tier-0
+      auto_heal: "true"
+    annotations:
+      summary: "Database connection pool nearly exhausted"
+      description: "More than 95% of HikariCP connections are in use"
+      action: "Auto-healing will reset idle connections"
+
+
+  # ----------------------------------
+  # Host disk space – Tier-0
+  # ----------------------------------
+  - alert: DiskSpaceCritical
+    expr: |
+      (
+        node_filesystem_avail_bytes{mountpoint="/",tier="tier-0"}
+        /
+        node_filesystem_size_bytes{mountpoint="/",tier="tier-0"}
+      ) < 0.10
+    for: 5m
+    labels:
+      severity: critical
+      tier: tier-0
+      auto_heal: "true"
+    annotations:
+      summary: "Critical disk space on host"
+      description: "Only {{ $value | humanizePercentage }} disk space remaining"
+      action: "Auto-healing will clean old logs and Docker images"
+
+
+  # ----------------------------------
+  # Error budget burn rate – Tier-0
+  # (99.9% SLO, fast burn – 14.4x)
+  # ----------------------------------
+  - alert: ErrorBudgetBurnRateHigh
+    expr: |
+      (
+        (
+          sum(rate(http_server_requests_total{tier="tier-0",status=~"5.."}[1h]))
+          /
+          sum(rate(http_server_requests_total{tier="tier-0"}[1h]))
+        )
+        / (1 - 0.999)
+      ) > 14.4
+    for: 5m
+    labels:
+      severity: critical
+      tier: tier-0
+      auto_heal: "false"
+    annotations:
+      summary: "Tier-0 error budget burning too fast"
+      description: "At this rate the monthly error budget will be exhausted in ~2 days"
+      action: "Immediate investigation required – halt deployments"

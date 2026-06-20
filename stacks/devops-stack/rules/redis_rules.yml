@@ -1,0 +1,45 @@
+groups:
+- name: redis_cache_alerts
+  rules:
+
+  - alert: RedisCacheHitRateLow
+    expr: |
+      (redis_keyspace_hits_total
+      /
+      (redis_keyspace_hits_total + redis_keyspace_misses_total)) < 0.7
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Redis cache hit rate is below 70%"
+      description: "Consider reviewing cache TTLs and warming strategies"
+
+  - alert: RedisMemoryHigh
+    expr: |
+      (redis_memory_used_bytes / redis_memory_max_bytes) > 0.9
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Redis memory usage exceeds 90%"
+      description: "Memory at {{ $value | humanizePercentage }}. Evictions may occur."
+
+  - alert: RedisHighEvictionRate
+    expr: |
+      rate(redis_evicted_keys_total[5m]) > 100
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High Redis eviction rate"
+      description: "{{ $value }} keys/s being evicted. Consider increasing maxmemory."
+
+  - alert: RedisSlowCommands
+    expr: |
+      redis_slowlog_length > 10
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Redis slow log is growing"
+      description: "{{ $value }} slow commands detected. Review query patterns."

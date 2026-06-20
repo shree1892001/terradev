@@ -1,0 +1,152 @@
+services:
+  plane-db:
+    image: postgres:15.7-alpine
+    container_name: plane-app-plane-db-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - plane_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plane -d plane"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - plane-net
+
+  plane-redis:
+    image: valkey/valkey:7.2.5-alpine
+    container_name: plane-app-plane-redis-1
+    restart: unless-stopped
+    volumes:
+      - plane_redis_data:/data
+    networks:
+      - plane-net
+
+  plane-mq:
+    image: rabbitmq:3.13.6-management-alpine
+    container_name: plane-app-plane-mq-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - plane_mq_data:/var/lib/rabbitmq
+    networks:
+      - plane-net
+
+  plane-minio:
+    image: minio/minio:RELEASE.2024-08-03T04-33-23Z
+    container_name: plane-app-plane-minio-1
+    restart: unless-stopped
+    command: server /export
+    env_file:
+      - .env
+    volumes:
+      - plane_minio_data:/export
+    networks:
+      - plane-net
+
+  plane-api:
+    image: makeplane/plane-backend:stable
+    container_name: plane-app-api-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      - plane-db
+      - plane-redis
+      - plane-mq
+      - plane-minio
+    networks:
+      - plane-net
+
+  plane-worker:
+    image: makeplane/plane-backend:stable
+    container_name: plane-app-worker-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      - plane-api
+    networks:
+      - plane-net
+
+  plane-beat-worker:
+    image: makeplane/plane-backend:stable
+    container_name: plane-app-beat-worker-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      - plane-api
+    networks:
+      - plane-net
+
+  plane-web:
+    image: makeplane/plane-frontend:stable
+    container_name: plane-app-web-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - plane-net
+
+  plane-admin:
+    image: makeplane/plane-admin:stable
+    container_name: plane-app-admin-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - plane-net
+
+  plane-space:
+    image: makeplane/plane-space:stable
+    container_name: plane-app-space-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - plane-net
+
+  plane-live:
+    image: makeplane/plane-live:stable
+    container_name: plane-app-live-1
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - plane-net
+
+  plane-proxy:
+    image: makeplane/plane-proxy:stable
+    container_name: plane-app-proxy-1
+    restart: unless-stopped
+    ports:
+      - "8001:80"
+    env_file:
+      - .env
+    depends_on:
+      - plane-web
+      - plane-admin
+      - plane-space
+      - plane-live
+      - plane-api
+    networks:
+      - plane-net
+      - redberyl-monitoring-net
+
+
+networks:
+  plane-net:
+    external: true
+    name: plane-net
+  redberyl-monitoring-net:
+    external: true
+
+volumes:
+  plane_db_data:
+  plane_redis_data:
+  plane_mq_data:
+  plane_minio_data:

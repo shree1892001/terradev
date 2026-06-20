@@ -1,0 +1,4 @@
+server_ip      = "YOUR_SERVER_IP_OR_DOMAIN"
+platform_dir   = "/opt/redberyl-platform"
+enabled_stacks = ["devops", "plane", "huly"]
+force_redeploy = ""

@@ -1,0 +1,84 @@
+groups:
+- name: rum_user_experience
+  interval: 1m
+  rules:
+
+  # Core Web Vitals degradation
+  - alert: LCPDegradation
+    expr: |
+      histogram_quantile(
+        0.75,
+        sum(rate(rum_web_vitals_seconds_bucket{metric="lcp"}[15m])) by (le)
+      ) > 4
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Largest Contentful Paint exceeds 4s threshold"
+      description: "P75 LCP is {{ $value | humanizeDuration }}. User experience may be impacted."
+      runbook_url: "https://wiki.accurest.com/runbooks/rum-lcp-degradation"
+
+  - alert: FIDDegradation
+    expr: |
+      histogram_quantile(
+        0.75,
+        sum(rate(rum_web_vitals_seconds_bucket{metric="fid"}[15m])) by (le)
+      ) > 0.3
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: "First Input Delay exceeds 300ms threshold"
+      description: "P75 FID is {{ $value | humanizeDuration }}. Users may experience input lag."
+
+  - alert: CLSDegradation
+    expr: |
+      histogram_quantile(
+        0.75,
+        sum(rate(rum_web_vitals_seconds_bucket{metric="cls"}[15m])) by (le)
+      ) > 0.25
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Cumulative Layout Shift exceeds 0.25 threshold"
+      description: "P75 CLS is {{ $value }}. Layout instability may frustrate users."
+
+  # JavaScript errors spike
+  - alert: HighJavaScriptErrorRate
+    expr: |
+      sum(rate(rum_js_errors_total[5m])) > 1
+    for: 5m
+    labels:
+      severity: high
+    annotations:
+      summary: "High JavaScript error rate detected"
+      description: "{{ $value }} JS errors/second. Check browser console logs in Loki."
+
+  # Synthetic journey failures
+  - alert: SyntheticJourneyFailing
+    expr: |
+      synthetic_journey_available == 0
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Critical user journey {{ $labels.journey_name }} is failing"
+      description: "Synthetic monitoring detected failure in {{ $labels.journey_name }}"
+      runbook_url: "https://wiki.accurest.com/runbooks/synthetic-journey-failure"
+
+  # Active sessions drop
+  - alert: UserSessionsDrop
+    expr: |
+      (
+        rum_active_sessions
+        - rum_active_sessions offset 1h
+      )
+      / clamp_min(rum_active_sessions offset 1h, 1)
+      < -0.5
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Active user sessions dropped by more than 50%"
+      description: "Session drop ratio is {{ $value }}. Possible service issue affecting users."

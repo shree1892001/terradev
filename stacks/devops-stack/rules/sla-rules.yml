@@ -1,0 +1,77 @@
+groups:
+- name: sla_monitoring
+  interval: 1m
+  rules:
+
+  # ------------------------------------------------
+  # 1. Monthly Availability Recording Rule
+  # ------------------------------------------------
+  - record: sla:availability:monthly
+    expr: |
+      avg by(service) (
+        avg_over_time(up{job=~"spring-boot-app.*"}[30d])
+      )
+
+  # ------------------------------------------------
+  # 2. Tier-0 SLA Breach (critical services)
+  # ------------------------------------------------
+  - alert: SLABreachTier0
+    expr: |
+      sla:availability:monthly{service=~"postgres|redis"} < 0.995
+    for: 5m
+    labels:
+      severity: critical
+      sla_tier: premium
+    annotations:
+      summary: "SLA breach for Tier-0 service {{ $labels.service }}"
+      description: "Monthly availability {{ $value | humanizePercentage }} is below 99.5% SLA"
+      action: "Immediate escalation required. Customer credits may apply."
+
+  # ------------------------------------------------
+  # 3. Tier-1 SLA Breach (application services)
+  # ------------------------------------------------
+  - alert: SLABreachTier1
+    expr: |
+      sla:availability:monthly{service=~"accustock|accustock-sre"} < 0.995
+    for: 5m
+    labels:
+      severity: high
+      sla_tier: standard
+    annotations:
+      summary: "SLA breach for Tier-1 service {{ $labels.service }}"
+      description: "Monthly availability {{ $value | humanizePercentage }} is below 99.5% SLA"
+
+  # ------------------------------------------------
+  # 4. Latency SLA Breach
+  # ------------------------------------------------
+  - alert: LatencySLABreach
+    expr: |
+      histogram_quantile(
+        0.95,
+        sum(rate(http_server_requests_seconds_bucket[5m])) by (le, service)
+      ) > 1
+    for: 5m
+    labels:
+      severity: high
+    annotations:
+      summary: "Latency SLA breach for {{ $labels.service }}"
+      description: "P95 latency {{ $value }}s exceeds 1s SLA target"
+
+  # ------------------------------------------------
+  # 5. Error Rate SLA Breach
+  # ------------------------------------------------
+  - alert: ErrorRateSLABreach
+    expr: |
+      sum by(service)(
+        rate(http_server_requests_seconds_count{status=~"5.."}[5m])
+      )
+      /
+      sum by(service)(
+        rate(http_server_requests_seconds_count[5m])
+      ) > 0.01
+    for: 5m
+    labels:
+      severity: high
+    annotations:
+      summary: "Error rate SLA breach for {{ $labels.service }}"
+      description: "Error rate {{ $value | humanizePercentage }} exceeds 1% SLA target"

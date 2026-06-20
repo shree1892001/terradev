@@ -1,0 +1,52 @@
+groups:
+- name: reconciliation_alerts
+  rules:
+
+  - alert: ReconciliationJobFailed
+    expr: |
+      accustock_reconciliation_failed_jobs>0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Reconciliation job {{ $labels.job_name }} failed"
+      description: "One or more reconciliation job runs failed in the last 5 minutes."
+
+  - alert: ReconciliationSLABreach
+    expr: |
+      histogram_quantile(
+        0.95,
+        sum by (job_name, le) (
+          rate(recon_job_duration_seconds_bucket[5m])
+        )
+      )
+      > on (job_name)
+      recon_job_sla_seconds
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Reconciliation job {{ $labels.job_name }} exceeded SLA"
+      description: "P95 job duration exceeded configured SLA."
+
+  - alert: HighDiscrepancyRate
+    expr: |
+      sum by (job_name) (
+        rate(recon_discrepancies_total{severity="critical"}[5m])
+      ) > 0.03
+    for: 5m
+    labels:
+      severity: high
+    annotations:
+      summary: "High discrepancy rate in {{ $labels.job_name }}"
+      description: "Critical discrepancy rate detected."
+
+  - alert: ReconciliationJobMissed
+    expr: |
+      time() - max by (job_name) (recon_job_last_success_timestamp) > 86400
+    for: 1h
+    labels:
+      severity: warning
+    annotations:
+      summary: "Reconciliation job {{ $labels.job_name }} not run in 24h"
+      description: "No successful reconciliation run detected in the last 24 hours."

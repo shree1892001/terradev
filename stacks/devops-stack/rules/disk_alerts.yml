@@ -1,0 +1,54 @@
+groups:
+  - name: disk_saturation
+    interval: 1m
+    rules:
+
+      - alert: DiskUsageRootWarning
+        expr: |
+          (1 - (node_filesystem_avail_bytes{mountpoint="/"}
+          / node_filesystem_size_bytes{mountpoint="/"})) * 100 > 80
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk usage warning on root filesystem (/)"
+          description: "Disk usage on / is above 80% (current: {{ $value | printf \"%.2f\" }}%)"
+          action: "Monitor disk usage and prepare for cleanup."
+
+      - alert: DiskUsageRootCritical
+        expr: |
+          (1 - (node_filesystem_avail_bytes{mountpoint="/"}
+          / node_filesystem_size_bytes{mountpoint="/"})) * 100 > 90
+        labels:
+          severity: critical
+          auto_heal: "true"
+        annotations:
+          summary: "Critical disk usage on root filesystem (/)"
+          description: "Disk usage on / is above 90% (current: {{ $value | printf \"%.2f\" }}%)"
+          action: "Auto-cleanup application logs immediately."
+
+      - alert: DiskIOWaitWarning
+        expr: |
+          avg by (instance) (
+            rate(node_cpu_seconds_total{mode="iowait"}[5m])
+          ) * 100 > 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk I/O wait detected"
+          description: "Disk I/O wait is above 20% (current: {{ $value | printf \"%.2f\" }}%)"
+          action: "Investigate slow queries and disk performance."
+
+      - alert: DiskIOWaitCritical
+        expr: |
+          avg by (instance) (
+            rate(node_cpu_seconds_total{mode="iowait"}[5m])
+          ) * 100 > 40
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical disk I/O wait detected"
+          description: "Disk I/O wait is above 40% (current: {{ $value | printf \"%.2f\" }}%)"
+          action: "Investigate slow queries and disk bottlenecks immediately."
+

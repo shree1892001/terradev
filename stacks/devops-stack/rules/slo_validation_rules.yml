@@ -1,0 +1,167 @@
+groups:
+  - name: slo_recording_rules
+    rules:
+
+      # ------------------------------------------------
+      # Availability SLO (30 days)
+      # ------------------------------------------------
+      - record: application:availability:ratio_rate30d
+        expr: |
+          avg by (application, tier) (
+            avg_over_time(up{tier!=""}[30d])
+          )
+
+      # ------------------------------------------------
+      # Error Rate (5m, 1h, 6h)
+      # ------------------------------------------------
+      - record: application:error_rate:ratio_rate5m
+        expr: |
+          sum(rate(http_server_requests_seconds_count{status=~"5..", tier!=""}[5m])) by (application, tier)
+          /
+          sum(rate(http_server_requests_seconds_count{tier!=""}[5m])) by (application, tier)
+
+      - record: application:error_rate:ratio_rate1h
+        expr: |
+          sum(rate(http_server_requests_seconds_count{status=~"5..", tier!=""}[1h])) by (application, tier)
+          /
+          sum(rate(http_server_requests_seconds_count{tier!=""}[1h])) by (application, tier)
+
+      - record: application:error_rate:ratio_rate6h
+        expr: |
+          sum(rate(http_server_requests_seconds_count{status=~"5..", tier!=""}[6h])) by (application, tier)
+          /
+          sum(rate(http_server_requests_seconds_count{tier!=""}[6h])) by (application, tier)
+
+      # ------------------------------------------------
+      # Latency Metrics
+      # ------------------------------------------------
+      - record: application:latency:p95_ms
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(http_server_requests_seconds_bucket{tier!=""}[5m])) by (le, application, tier)
+          ) * 1000
+
+      - record: application:latency:p99_ms
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum(rate(http_server_requests_seconds_bucket{tier!=""}[5m])) by (le, application, tier)
+          ) * 1000
+
+      # ------------------------------------------------
+      # Burn Rate Calculations
+      # ------------------------------------------------
+      # tier-0 = 99.9%  -> error budget = 0.001
+      # tier-1 = 99.5%  -> error budget = 0.005
+      # tier-3 = 99.0%  -> error budget = 0.01
+      # tier-4 = 95.0%  -> error budget = 0.05
+
+      - record: application:burn_rate:5m
+        expr: |
+          (application:error_rate:ratio_rate5m{tier="tier-0"} / 0.001)
+          or
+          (application:error_rate:ratio_rate5m{tier="tier-1"} / 0.005)
+          or
+          (application:error_rate:ratio_rate5m{tier="tier-2"} / 0.01)
+          or
+          (application:error_rate:ratio_rate5m{tier="tier-3"} / 0.05)
+
+      - record: application:burn_rate:1h
+        expr: |
+          (application:error_rate:ratio_rate1h{tier="tier-0"} / 0.001)
+          or
+          (application:error_rate:ratio_rate1h{tier="tier-1"} / 0.005)
+          or
+          (application:error_rate:ratio_rate1h{tier="tier-2"} / 0.01)
+          or
+          (application:error_rate:ratio_rate1h{tier="tier-3"} / 0.05)
+
+      - record: application:burn_rate:6h
+        expr: |
+          (application:error_rate:ratio_rate6h{tier="tier-0"} / 0.001)
+          or
+          (application:error_rate:ratio_rate6h{tier="tier-1"} / 0.005)
+          or
+          (application:error_rate:ratio_rate6h{tier="tier-2"} / 0.01)
+          or
+          (application:error_rate:ratio_rate6h{tier="tier-3"} / 0.05)
+
+  - name: slo_alerting_rules
+    rules:
+
+      # ------------------------------------------------
+      # CRITICAL Burn Rate Alert
+      # ------------------------------------------------
+      - alert: SLOCriticalBurnRate
+        expr: |
+          (application:burn_rate:5m > 14)
+          and
+          (application:burn_rate:1h > 14)
+        for: 2m
+        labels:
+          severity: critical
+          status: critical
+        annotations:
+          summary: "CRITICAL: SLO burn rate for {{ $labels.application }}"
+          description: "Burn rate exceeding 14x error budget (Tier: {{ $labels.tier }})"
+
+      # ------------------------------------------------
+      # WARNING Burn Rate Alert
+      # ------------------------------------------------
+      - alert: SLOWarningBurnRate
+        expr: |
+          (application:burn_rate:1h > 6)
+          or
+          (application:burn_rate:6h > 3)
+        for: 5m
+        labels:
+          severity: warning
+          status: warning
+        annotations:
+          summary: "WARNING: Elevated burn rate for {{ $labels.application }}"
+          description: "Burn rate exceeding threshold (Tier: {{ $labels.tier }})"
+
+      # ------------------------------------------------
+      # Availability Violation Alerts
+      # ------------------------------------------------
+      - alert: SLOAvailabilityViolationTier0
+        expr: application:availability:ratio_rate30d{tier="tier-0"} < 0.999
+        for: 5m
+        labels:
+          severity: critical
+          status: violation
+        annotations:
+          summary: "VIOLATION: SLO miss for {{ $labels.application }}"
+          description: "30d availability {{ $value | printf \"%.4f\" }} below 99.9% target"
+
+      - alert: SLOAvailabilityViolationTier1
+        expr: application:availability:ratio_rate30d{tier="tier-1"} < 0.995
+        for: 5m
+        labels:
+          severity: critical
+          status: violation
+        annotations:
+          summary: "VIOLATION: SLO miss for {{ $labels.application }}"
+          description: "30d availability {{ $value | printf \"%.4f\" }} below 99.5% target"
+
+      - alert: SLOAvailabilityViolationTier2
+        expr: application:availability:ratio_rate30d{tier="tier-2"} < 0.990
+        for: 5m
+        labels:
+          severity: warning
+          status: violation
+        annotations:
+          summary: "VIOLATION: SLO miss for {{ $labels.application }}"
+          description: "30d availability {{ $value | printf \"%.4f\" }} below 99.0% target"
+
+      - alert: SLOAvailabilityViolationTier3
+        expr: application:availability:ratio_rate30d{tier="tier-3"} < 0.950
+        for: 5m
+        labels:
+          severity: warning
+          status: violation
+        annotations:
+          summary: "VIOLATION: SLO miss for {{ $labels.application }}"
+          description: "30d availability {{ $value | printf \"%.4f\" }} below 95.0% target"
+

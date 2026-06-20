@@ -1,0 +1,17 @@
+terraform.tfvars
+configs/plane.env
+configs/huly.env
+configs/huly-nginx.conf
+configs/jenkins-credentials.env
+configs/postgres-exporter.env
+*.pem
+*.key
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+crash.log
+*.log
+
+configs/jenkins-secrets.env
+*.tfstate
+*.tfstate.*

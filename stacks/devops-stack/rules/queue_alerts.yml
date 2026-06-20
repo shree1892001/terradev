@@ -1,0 +1,39 @@
+groups:
+- name: message_queue_alerts
+  rules:
+
+  - alert: QueueDepthHigh
+    expr: rabbitmq_queue_messages > 1000
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Queue {{ $labels.queue }} depth is high"
+      description: "{{ $value }} messages in queue"
+
+  - alert: QueueDepthCritical
+    expr: rabbitmq_queue_messages > 5000
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Queue {{ $labels.queue }} depth is critical"
+      description: "{{ $value }} messages in queue. Consumers may be down."
+
+  - alert: DeadLetterQueueGrowing
+    expr: rabbitmq_queue_messages{queue=~".*dead.*"} > 10
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Dead letter queue has messages"
+      description: "{{ $value }} messages in DLQ. Manual review required."
+
+  - alert: NoConsumers
+    expr: (rabbitmq_queue_consumers == 0) and (rabbitmq_queue_messages > 0)
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Queue {{ $labels.queue }} has no consumers"
+      description: "Messages are accumulating with no consumers."
